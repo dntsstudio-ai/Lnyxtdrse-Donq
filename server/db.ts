@@ -1006,10 +1006,12 @@ export async function listPublicationRequests(
   status?: PubStatus
 ): Promise<PublicationRequest[]> {
   const db = getDb();
-  let q: FirebaseFirestore.Query = db.collection("publication_requests").orderBy("createdAt", "desc");
+  // Firestore требует составной индекс для orderBy+where — фильтруем в памяти
+  let q: FirebaseFirestore.Query = db.collection("publication_requests");
   if (status) q = q.where("status", "==", status);
   const snap = await q.get();
-  return snap.docs.map((d) => docToPubReq(d.data() as Record<string, unknown>));
+  const items = snap.docs.map((d) => docToPubReq(d.data() as Record<string, unknown>));
+  return items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
 
 export async function updatePublicationRequest(

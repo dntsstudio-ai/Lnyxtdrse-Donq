@@ -5,6 +5,15 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { trpc } from "@/lib/trpc";
@@ -59,6 +68,8 @@ export default function Admin() {
   const [instPage, setInstPage] = useState(1);
   const [instSearch, setInstSearch] = useState("");
   const [newsPage, setNewsPage] = useState(1);
+  const [rejectDialog, setRejectDialog] = useState<{ pubId: number; institutionId: number } | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
   const utils = trpc.useUtils();
 
   // Stats
@@ -460,7 +471,10 @@ export default function Admin() {
                           size="sm"
                           variant="outline"
                           className="border-red-200 text-red-600 hover:bg-red-50 h-8"
-                          onClick={() => rejectPublication.mutate({ id: pub.id, institutionId: pub.institutionId, reason: "Отклонено администратором" })}
+                          onClick={() => {
+                            setRejectReason("");
+                            setRejectDialog({ pubId: pub.id, institutionId: pub.institutionId });
+                          }}
                           disabled={rejectPublication.isPending}
                         >
                           <XCircle className="w-3.5 h-3.5 mr-1.5" />
@@ -565,6 +579,55 @@ export default function Admin() {
           </div>
         )}
       </div>
+
+      {/* Диалог отказа с причиной */}
+      <Dialog
+        open={!!rejectDialog}
+        onOpenChange={(open) => { if (!open) setRejectDialog(null); }}
+      >
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle>Отклонить заявку</DialogTitle>
+            <DialogDescription>
+              Укажите причину отказа — редактор увидит её в своих уведомлениях.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            placeholder="Например: не заполнены обязательные поля, некорректное описание..."
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            className="min-h-[100px] resize-none"
+          />
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setRejectDialog(null)}
+            >
+              Отмена
+            </Button>
+            <Button
+              className="bg-red-600 hover:bg-red-700 text-white"
+              disabled={!rejectReason.trim() || rejectPublication.isPending}
+              onClick={() => {
+                if (!rejectDialog) return;
+                rejectPublication.mutate({
+                  id: rejectDialog.pubId,
+                  institutionId: rejectDialog.institutionId,
+                  reason: rejectReason.trim(),
+                });
+                setRejectDialog(null);
+              }}
+            >
+              {rejectPublication.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-1.5" />
+              ) : (
+                <XCircle className="w-4 h-4 mr-1.5" />
+              )}
+              Отклонить
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PageLayout>
   );
 }
