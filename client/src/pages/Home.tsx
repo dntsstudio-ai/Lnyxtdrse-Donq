@@ -1,5 +1,6 @@
+import { useFirebaseAuth } from "@/contexts/AuthContext";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { getLoginUrl } from "@/const";
+
 import { trpc } from "@/lib/trpc";
 import InstitutionCard from "@/components/InstitutionCard";
 import PageLayout from "@/components/PageLayout";
@@ -36,6 +37,7 @@ const ROSTOV_CITIES = [
 
 export default function Home() {
   const { isAuthenticated } = useAuth();
+  const { openAuthModal } = useFirebaseAuth();
   const [, navigate] = useLocation();
   const [selectedCity, setSelectedCity] = useState<string | null>(null);
   const [carouselIndex, setCarouselIndex] = useState(0);
@@ -278,7 +280,7 @@ export default function Home() {
               <Button
                 size="lg"
                 className="bg-[var(--color-brand-gold)] hover:bg-[var(--color-brand-gold-light)] text-[var(--color-brand-navy)] font-semibold px-8"
-                onClick={() => (window.location.href = getLoginUrl())}
+                onClick={() => (openAuthModal())}
               >
                 <GraduationCap className="w-4.5 h-4.5 mr-2" />
                 Зарегистрироваться бесплатно

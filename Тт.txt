@@ -1,7 +1,0 @@
-NODE_ENV=production
-JWT_SECRET=придумай_длинную_строку
-OWNER_OPEN_ID=твой_open_id
-VITE_APP_ID=твой_app_id
-OAUTH_SERVER_URL=твой_oauth_url
-FIREBASE_PROJECT_ID=edurostov-53ef0
-FIREBASE_SERVICE_ACCOUNT_JSON={"type":"service_account",...}  ← весь JSON одной строкой

@@ -1,3 +1,4 @@
+import { useFirebaseAuth } from "@/contexts/AuthContext";
 import { useAuth } from "@/_core/hooks/useAuth";
 import PageLayout from "@/components/PageLayout";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -24,7 +25,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useState } from "react";
-import { getLoginUrl } from "@/const";
+
 import { toast } from "sonner";
 
 const ADMIN_TABS = [
@@ -51,6 +52,7 @@ const ROLE_COLORS: Record<string, string> = {
 
 export default function Admin() {
   const { user, isAuthenticated, loading } = useAuth();
+  const { openAuthModal } = useFirebaseAuth();
   const [activeTab, setActiveTab] = useState("stats");
   const [userSearch, setUserSearch] = useState("");
   const [userPage, setUserPage] = useState(1);
@@ -133,7 +135,7 @@ export default function Admin() {
             <LogIn className="w-8 h-8 text-[var(--color-brand-navy)]" />
           </div>
           <h2 className="font-serif text-2xl font-semibold mb-2">Требуется авторизация</h2>
-          <Button className="bg-[var(--color-brand-navy)] text-white mt-4" onClick={() => (window.location.href = getLoginUrl())}>
+          <Button className="bg-[var(--color-brand-navy)] text-white mt-4" onClick={() => (openAuthModal())}>
             Войти
           </Button>
         </div>

@@ -1,5 +1,6 @@
+import { useFirebaseAuth } from "@/contexts/AuthContext";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { getLoginUrl } from "@/const";
+
 import InstitutionCard from "@/components/InstitutionCard";
 import PageLayout from "@/components/PageLayout";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -55,6 +56,7 @@ export default function Profile() {
   const { tab } = useParams<{ tab?: string }>();
   const activeTab = tab ?? "profile";
   const { user, isAuthenticated, loading } = useAuth();
+  const { openAuthModal } = useFirebaseAuth();
   const utils = trpc.useUtils();
 
   const [editName, setEditName] = useState("");
@@ -156,7 +158,7 @@ export default function Profile() {
           <p className="text-muted-foreground text-sm mb-6">Для доступа к профилю необходима авторизация</p>
           <Button
             className="bg-[var(--color-brand-navy)] text-white"
-            onClick={() => (window.location.href = getLoginUrl())}
+            onClick={() => (openAuthModal())}
           >
             Войти
           </Button>

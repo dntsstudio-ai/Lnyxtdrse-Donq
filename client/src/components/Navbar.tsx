@@ -1,5 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
-import { getLoginUrl } from "@/const";
+import { useFirebaseAuth } from "@/contexts/AuthContext";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import {
@@ -40,6 +40,7 @@ const navLinks = [
 
 export default function Navbar() {
   const { user, isAuthenticated, logout } = useAuth();
+  const { openAuthModal } = useFirebaseAuth();
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -224,7 +225,7 @@ export default function Navbar() {
               <Button
                 size="sm"
                 className="bg-[var(--color-brand-navy)] text-white hover:bg-[var(--color-brand-navy-light)] font-medium"
-                onClick={() => (window.location.href = getLoginUrl())}
+                onClick={() => (openAuthModal())}
               >
                 Войти
               </Button>
@@ -265,7 +266,7 @@ export default function Navbar() {
             {!isAuthenticated && (
               <Button
                 className="mt-2 bg-[var(--color-brand-navy)] text-white"
-                onClick={() => (window.location.href = getLoginUrl())}
+                onClick={() => (openAuthModal())}
               >
                 Войти / Зарегистрироваться
               </Button>
