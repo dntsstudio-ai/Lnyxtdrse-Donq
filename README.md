@@ -1,2 +1,0 @@
-# Lnyxtdrse-Donq
-Quest
