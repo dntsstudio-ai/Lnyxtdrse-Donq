@@ -987,6 +987,21 @@ export async function createPublicationRequest(
   return id;
 }
 
+export async function getPublicationRequestById(
+  id: number
+): Promise<PublicationRequest | undefined> {
+  const db = getDb();
+  const doc = await db.collection("publication_requests").doc(String(id)).get();
+  if (!doc.exists) return undefined;
+  return docToPubReq(doc.data() as Record<string, unknown>);
+}
+
+export async function getAdminUsers(): Promise<User[]> {
+  const db = getDb();
+  const snap = await db.collection("users").where("role", "==", "admin").get();
+  return snap.docs.map((d) => docToUser(d.data() as Record<string, unknown>));
+}
+
 export async function listPublicationRequests(
   status?: PubStatus
 ): Promise<PublicationRequest[]> {

@@ -61,6 +61,8 @@ import {
   upsertUser,
   upsertUserPreferences,
   getPublicationRequestsByEditor,
+  getPublicationRequestById,
+  getAdminUsers,
 } from "./db";
 
 // ─── Role Guards ──────────────────────────────────────────────────────────────
@@ -210,8 +212,26 @@ const institutionsRouter = router({
   submitForReview: editorProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input, ctx }) => {
+      const inst = await getInstitutionById(input.id);
+      if (!inst) throw new TRPCError({ code: "NOT_FOUND" });
+
       await updateInstitution(input.id, { status: "pending" });
-      await createPublicationRequest(input.id, ctx.user.id);
+      const requestId = await createPublicationRequest(input.id, ctx.user.id);
+
+      // Уведомляем всех администраторов
+      const admins = await getAdminUsers();
+      await Promise.all(
+        admins.map((admin) =>
+          createNotification({
+            userId: admin.id,
+            type: "publication_request",
+            title: "Новая заявка на публикацию",
+            message: `Редактор «${ctx.user.name ?? "Без имени"}» подал заявку на публикацию учреждения «${inst.name}».`,
+            relatedId: requestId,
+          })
+        )
+      );
+
       return { success: true };
     }),
 
@@ -659,16 +679,16 @@ const publicationsRouter = router({
   approve: adminProcedure
     .input(z.object({ id: z.number(), institutionId: z.number() }))
     .mutation(async ({ input, ctx }) => {
+      // Берём заявку ДО обновления
+      const req = await getPublicationRequestById(input.id);
       await updatePublicationRequest(input.id, { status: "approved", reviewedBy: ctx.user.id });
       await updateInstitution(input.institutionId, { status: "published" });
-      const approvedReqs = await listPublicationRequests("approved");
-      const thisReq = approvedReqs.find((r: { id: number }) => r.id === input.id) as typeof approvedReqs[0] | undefined;
-      if (thisReq) {
+      if (req) {
         await createNotification({
-          userId: thisReq.editorId,
+          userId: req.editorId,
           type: "publication_approved",
           title: "Заявка одобрена",
-          message: `Ваша заявка #${input.id} была одобрена и учреждение опубликовано.`,
+          message: `Ваша заявка #${input.id} была одобрена — учреждение опубликовано.`,
           relatedId: input.id,
         });
       }
@@ -678,17 +698,17 @@ const publicationsRouter = router({
   reject: adminProcedure
     .input(z.object({ id: z.number(), institutionId: z.number(), reason: z.string() }))
     .mutation(async ({ input, ctx }) => {
+      // Берём заявку ДО обновления
+      const req = await getPublicationRequestById(input.id);
       await updatePublicationRequest(input.id, {
         status: "rejected",
         rejectionReason: input.reason,
         reviewedBy: ctx.user.id,
       });
       await updateInstitution(input.institutionId, { status: "rejected" });
-      const rejectedReqs = await listPublicationRequests("rejected");
-      const thisReq = rejectedReqs.find((r: { id: number }) => r.id === input.id) as typeof rejectedReqs[0] | undefined;
-      if (thisReq) {
+      if (req) {
         await createNotification({
-          userId: thisReq.editorId,
+          userId: req.editorId,
           type: "publication_rejected",
           title: "Заявка отклонена",
           message: `Ваша заявка #${input.id} была отклонена. Причина: ${input.reason}`,
