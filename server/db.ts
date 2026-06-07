@@ -796,14 +796,16 @@ export async function listNews(opts: {
   limit?: number;
 }): Promise<{ items: News[]; total: number }> {
   const db = getDb();
-  let q: FirebaseFirestore.Query = db.collection("news");
-  if (opts.status) q = q.where("status", "==", opts.status);
-  q = q.orderBy("publishedAt", "desc");
-
-  const snap = await q.get();
-  const all = snap.docs.map((d) => docToNews(d.data() as Record<string, unknown>));
+  // orderBy+where требует составного индекса — фильтруем status в памяти
+  const snap = await db.collection("news").get();
+  let all = snap.docs.map((d) => docToNews(d.data() as Record<string, unknown>));
+  if (opts.status) all = all.filter((n) => n.status === opts.status);
+  all.sort((a, b) => {
+    const da = a.publishedAt ?? a.createdAt;
+    const db2 = b.publishedAt ?? b.createdAt;
+    return db2.getTime() - da.getTime();
+  });
   const total = all.length;
-
   const page = opts.page ?? 1;
   const limit = opts.limit ?? 10;
   return { items: all.slice((page - 1) * limit, page * limit), total };
@@ -1172,3 +1174,204 @@ export async function createContactMessage(data: {
     createdAt: new Date(),
   });
 }
+
+// ─── News Comments ────────────────────────────────────────────────────────────
+
+export interface NewsComment {
+  id: number;
+  newsId: number;
+  userId: number;
+  text: string;
+  createdAt: Date;
+}
+
+export async function getNewsComments(newsId: number): Promise<NewsComment[]> {
+  const db = getDb();
+  const snap = await db.collection("news_comments").where("newsId", "==", newsId).get();
+  const items = snap.docs.map((d) => {
+    const data = d.data() as Record<string, unknown>;
+    return normalize({
+      id: data.id as number,
+      newsId: data.newsId as number,
+      userId: data.userId as number,
+      text: data.text as string,
+      createdAt: tsToDate(data.createdAt),
+    });
+  });
+  return items.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+}
+
+export async function createNewsComment(data: {
+  newsId: number;
+  userId: number;
+  text: string;
+}): Promise<NewsComment> {
+  const db = getDb();
+  const id = await nextId("news_comments");
+  const now = new Date();
+  await db.collection("news_comments").doc(String(id)).set({
+    id,
+    newsId: data.newsId,
+    userId: data.userId,
+    text: data.text,
+    createdAt: now,
+  });
+  return { id, newsId: data.newsId, userId: data.userId, text: data.text, createdAt: now };
+}
+
+export async function deleteNewsComment(id: number): Promise<void> {
+  const db = getDb();
+  await db.collection("news_comments").doc(String(id)).delete();
+}
+
+// ─── News Likes ───────────────────────────────────────────────────────────────
+
+export async function getNewsLikeCount(newsId: number): Promise<number> {
+  const db = getDb();
+  const snap = await db.collection("news_likes").where("newsId", "==", newsId).count().get();
+  return snap.data().count;
+}
+
+export async function isNewsLiked(newsId: number, userId: number): Promise<boolean> {
+  const db = getDb();
+  const snap = await db
+    .collection("news_likes")
+    .where("newsId", "==", newsId)
+    .where("userId", "==", userId)
+    .limit(1)
+    .get();
+  return !snap.empty;
+}
+
+export async function toggleNewsLike(newsId: number, userId: number): Promise<{ liked: boolean; count: number }> {
+  const db = getDb();
+  const existing = await db
+    .collection("news_likes")
+    .where("newsId", "==", newsId)
+    .where("userId", "==", userId)
+    .limit(1)
+    .get();
+
+  if (!existing.empty) {
+    await existing.docs[0]!.ref.delete();
+  } else {
+    const id = await nextId("news_likes");
+    await db.collection("news_likes").doc(String(id)).set({ id, newsId, userId, createdAt: new Date() });
+  }
+  const count = await getNewsLikeCount(newsId);
+  return { liked: existing.empty, count };
+}
+
+// ─── Legal Documents (Policy / Agreement) ────────────────────────────────────
+
+export interface LegalDoc {
+  id: string; // "privacy" | "terms"
+  content: string;
+  publishedContent: string;
+  updatedAt: Date;
+  publishedAt: Date | null;
+}
+
+export async function getLegalDoc(id: "privacy" | "terms"): Promise<LegalDoc> {
+  const db = getDb();
+  const doc = await db.collection("legal_docs").doc(id).get();
+  if (!doc.exists) {
+    return {
+      id,
+      content: id === "privacy" ? DEFAULT_PRIVACY : DEFAULT_TERMS,
+      publishedContent: id === "privacy" ? DEFAULT_PRIVACY : DEFAULT_TERMS,
+      updatedAt: new Date(),
+      publishedAt: null,
+    };
+  }
+  const data = doc.data() as Record<string, unknown>;
+  return {
+    id: data.id as string,
+    content: data.content as string,
+    publishedContent: (data.publishedContent as string) ?? (data.content as string),
+    updatedAt: tsToDate(data.updatedAt),
+    publishedAt: data.publishedAt ? tsToDate(data.publishedAt) : null,
+  };
+}
+
+export async function saveLegalDocDraft(id: "privacy" | "terms", content: string): Promise<void> {
+  const db = getDb();
+  await db.collection("legal_docs").doc(id).set(
+    { id, content, updatedAt: new Date() },
+    { merge: true }
+  );
+}
+
+export async function publishLegalDoc(id: "privacy" | "terms"): Promise<void> {
+  const db = getDb();
+  const doc = await db.collection("legal_docs").doc(id).get();
+  const content = (doc.data()?.content as string) ?? (id === "privacy" ? DEFAULT_PRIVACY : DEFAULT_TERMS);
+  await db.collection("legal_docs").doc(id).set(
+    { id, publishedContent: content, publishedAt: new Date() },
+    { merge: true }
+  );
+}
+
+const DEFAULT_PRIVACY = `# Политика конфиденциальности
+
+**Дата вступления в силу:** ${new Date().toLocaleDateString("ru-RU")}
+
+## 1. Общие положения
+
+ЭдуДон (edudon.ru) собирает и обрабатывает персональные данные пользователей в соответствии с Федеральным законом № 152-ФЗ «О персональных данных».
+
+## 2. Какие данные мы собираем
+
+- Имя и адрес электронной почты (при регистрации)
+- Данные об активности на сайте (просмотры, закладки, отзывы)
+- Техническая информация (IP-адрес, тип браузера)
+
+## 3. Цели обработки данных
+
+- Обеспечение работы личного кабинета
+- Формирование персонализированных рекомендаций
+- Улучшение качества сервиса
+
+## 4. Хранение и защита
+
+Данные хранятся в защищённой базе данных Firebase (Google Cloud). Мы не передаём данные третьим лицам без вашего согласия.
+
+## 5. Права пользователя
+
+Вы вправе запросить удаление своих данных, написав на info@edudon.ru.
+
+## 6. Контакты
+
+По вопросам обработки данных: info@edudon.ru`;
+
+const DEFAULT_TERMS = `# Пользовательское соглашение
+
+**Дата вступления в силу:** ${new Date().toLocaleDateString("ru-RU")}
+
+## 1. Предмет соглашения
+
+Настоящее соглашение регулирует использование платформы ЭдуДон (edudon.ru) — агрегатора образовательных учреждений Ростовской области.
+
+## 2. Условия использования
+
+- Сервис предоставляется бесплатно для информационных целей
+- Пользователь несёт ответственность за достоверность публикуемых отзывов
+- Запрещено размещение ложной, оскорбительной или спамерской информации
+
+## 3. Права и обязанности платформы
+
+- Мы вправе удалять контент, нарушающий правила
+- Мы вправе блокировать аккаунты нарушителей
+- Мы не гарантируем абсолютную точность данных об учреждениях
+
+## 4. Интеллектуальная собственность
+
+Все материалы платформы защищены авторским правом. Копирование без разрешения запрещено.
+
+## 5. Ограничение ответственности
+
+Платформа не несёт ответственности за решения, принятые на основе информации сайта.
+
+## 6. Контакты
+
+По вопросам соглашения: info@edudon.ru`;

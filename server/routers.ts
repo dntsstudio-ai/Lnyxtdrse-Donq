@@ -63,6 +63,15 @@ import {
   getPublicationRequestsByEditor,
   getPublicationRequestById,
   getAdminUsers,
+  getNewsComments,
+  createNewsComment,
+  deleteNewsComment,
+  toggleNewsLike,
+  getNewsLikeCount,
+  isNewsLiked,
+  getLegalDoc,
+  saveLegalDocDraft,
+  publishLegalDoc,
 } from "./db";
 
 // ─── Role Guards ──────────────────────────────────────────────────────────────
@@ -515,7 +524,7 @@ const recommendationsRouter = router({
 
   generate: protectedProcedure.mutation(async ({ ctx }) => {
     const prefs = await getUserPreferences(ctx.user.id);
-    if (!prefs) throw new TRPCError({ code: "BAD_REQUEST", message: "Please fill in your preferences first" });
+    if (!prefs) throw new TRPCError({ code: "BAD_REQUEST", message: "Сначала заполните анкету предпочтений" });
 
     const { items: allInstitutions } = await listInstitutions({ status: "published", limit: 100 });
 
@@ -524,61 +533,39 @@ const recommendationsRouter = router({
       .map((i) => `- ${i.name} (${i.type}, ${i.city}): ${i.shortDescription ?? ""}`)
       .join("\n");
 
-    const prompt = `You are an educational advisor helping a student in Rostov Oblast, Russia choose an educational institution.
+    const prompt = `Ты советник по образованию, помогающий студенту в Ростовской области выбрать учебное заведение.
 
-User preferences:
-- Preferred institution types: ${(prefs.preferredTypes as string[] | null)?.join(", ") || "any"}
-- Preferred cities: ${(prefs.preferredCities as string[] | null)?.join(", ") || "any"}
-- Preferred specializations: ${(prefs.preferredSpecializations as string[] | null)?.join(", ") || "any"}
-- Budget preference: ${prefs.budget || "any"}
-- Additional notes: ${prefs.additionalInfo || "none"}
+Предпочтения пользователя:
+- Типы учреждений: ${(prefs.preferredTypes as string[] | null)?.join(", ") || "любые"}
+- Города: ${(prefs.preferredCities as string[] | null)?.join(", ") || "любые"}
+- Специальности: ${(prefs.preferredSpecializations as string[] | null)?.join(", ") || "любые"}
+- Бюджет: ${prefs.budget === "free" ? "бюджет" : prefs.budget === "paid" ? "платное" : "любой"}
+- Дополнительно: ${prefs.additionalInfo || "не указано"}
 
-Available institutions:
+Доступные учреждения:
 ${institutionsSummary}
 
-Based on the user's preferences, recommend the top 5 most suitable institutions. For each recommendation:
-1. State the institution name exactly as listed
-2. Provide a 2-3 sentence personalized explanation of why it matches their preferences
-3. Highlight key strengths relevant to their goals
-
-Respond in Russian. Format as JSON array: [{"name": "...", "explanation": "...", "matchScore": 85}]`;
+Порекомендуй топ-5 наиболее подходящих. Для каждого: точное название, 2-3 предложения почему подходит, оценка 0-100.
+Ответь строго JSON массивом: [{"name": "...", "explanation": "...", "matchScore": 85}]
+Только JSON, без лишнего текста.`;
 
     const response = await invokeLLM({
       messages: [{ role: "user", content: prompt }],
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "recommendations",
-          strict: true,
-          schema: {
-            type: "object",
-            properties: {
-              recommendations: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    name: { type: "string" },
-                    explanation: { type: "string" },
-                    matchScore: { type: "number" },
-                  },
-                  required: ["name", "explanation", "matchScore"],
-                  additionalProperties: false,
-                },
-              },
-            },
-            required: ["recommendations"],
-            additionalProperties: false,
-          },
-        },
-      },
+      maxTokens: 1500,
     });
 
     const rawContent = response.choices[0]?.message?.content;
-    const content = typeof rawContent === "string" ? rawContent : null;
-    if (!content) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+    const rawStr = typeof rawContent === "string" ? rawContent : null;
+    if (!rawStr) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Не удалось получить рекомендации" });
 
-    const parsed = JSON.parse(content) as { recommendations: Array<{ name: string; explanation: string; matchScore: number }> };
+    let parsed: { recommendations: Array<{ name: string; explanation: string; matchScore: number }> };
+    try {
+      const clean = rawStr.replace(/```json|```/g, "").trim();
+      const arr = JSON.parse(clean);
+      parsed = Array.isArray(arr) ? { recommendations: arr } : arr;
+    } catch {
+      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Ошибка формата ответа" });
+    }
 
     const enriched = await Promise.all(
       parsed.recommendations.map(async (rec) => {
@@ -771,6 +758,91 @@ const contactsRouter = router({
     }),
 });
 
+// ─── News Comments Router ─────────────────────────────────────────────────────
+
+const newsCommentsRouter = router({
+  list: publicProcedure
+    .input(z.object({ newsId: z.number() }))
+    .query(async ({ input, ctx }) => {
+      const comments = await getNewsComments(input.newsId);
+      const enriched = await Promise.all(
+        comments.map(async (c) => {
+          const author = await getUserById(c.userId);
+          return {
+            ...c,
+            author: author ? { name: author.name, avatar: author.avatar, role: author.role } : null,
+          };
+        })
+      );
+      return enriched;
+    }),
+
+  create: protectedProcedure
+    .input(z.object({ newsId: z.number(), text: z.string().min(1).max(1000) }))
+    .mutation(async ({ input, ctx }) => {
+      const comment = await createNewsComment({
+        newsId: input.newsId,
+        userId: ctx.user.id,
+        text: input.text,
+      });
+      const author = { name: ctx.user.name, avatar: ctx.user.avatar, role: ctx.user.role };
+      return { ...comment, author };
+    }),
+
+  delete: protectedProcedure
+    .input(z.object({ id: z.number(), newsId: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const isModeratorOrAdmin = ["admin", "editor"].includes(ctx.user.role);
+      if (!isModeratorOrAdmin) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Нет прав для удаления комментария" });
+      }
+      await deleteNewsComment(input.id);
+      return { success: true };
+    }),
+});
+
+// ─── News Likes Router ────────────────────────────────────────────────────────
+
+const newsLikesRouter = router({
+  status: publicProcedure
+    .input(z.object({ newsId: z.number() }))
+    .query(async ({ input, ctx }) => {
+      const count = await getNewsLikeCount(input.newsId);
+      const liked = ctx.user ? await isNewsLiked(input.newsId, ctx.user.id) : false;
+      return { count, liked };
+    }),
+
+  toggle: protectedProcedure
+    .input(z.object({ newsId: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      return toggleNewsLike(input.newsId, ctx.user.id);
+    }),
+});
+
+// ─── Legal Documents Router ───────────────────────────────────────────────────
+
+const legalRouter = router({
+  get: publicProcedure
+    .input(z.object({ id: z.enum(["privacy", "terms"]) }))
+    .query(async ({ input }) => {
+      return getLegalDoc(input.id);
+    }),
+
+  saveDraft: adminProcedure
+    .input(z.object({ id: z.enum(["privacy", "terms"]), content: z.string() }))
+    .mutation(async ({ input }) => {
+      await saveLegalDocDraft(input.id, input.content);
+      return { success: true };
+    }),
+
+  publish: adminProcedure
+    .input(z.object({ id: z.enum(["privacy", "terms"]) }))
+    .mutation(async ({ input }) => {
+      await publishLegalDoc(input.id);
+      return { success: true };
+    }),
+});
+
 // ─── App Router ───────────────────────────────────────────────────────────────
 
 export const appRouter = router({
@@ -794,6 +866,9 @@ export const appRouter = router({
   stats: statsRouter,
   uploads: uploadsRouter,
   contacts: contactsRouter,
+  newsComments: newsCommentsRouter,
+  newsLikes: newsLikesRouter,
+  legal: legalRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -70,6 +70,7 @@ export default function Admin() {
   const [newsPage, setNewsPage] = useState(1);
   const [rejectDialog, setRejectDialog] = useState<{ pubId: number; institutionId: number } | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [viewPub, setViewPub] = useState<any | null>(null);
   const utils = trpc.useUtils();
 
   // Stats
@@ -88,6 +89,17 @@ export default function Admin() {
     { page: instPage, limit: 10, search: instSearch || undefined },
     { enabled: isAuthenticated && user?.role === "admin" && activeTab === "institutions" }
   );
+
+  // All published institutions for representative binding dropdown
+  const { data: allInstsData } = trpc.institutions.list.useQuery(
+    { limit: 200, status: "published" as const },
+    { enabled: isAuthenticated && user?.role === "admin" && activeTab === "users" }
+  );
+
+  const assignRepresentative = trpc.institutions.assignRepresentative.useMutation({
+    onSuccess: () => { utils.users.list.invalidate(); toast.success("Представитель привязан"); },
+    onError: () => toast.error("Ошибка привязки"),
+  });
 
   // Publications (moderation)
   const { data: pubsData, isLoading: pubsLoading } = trpc.publications.list.useQuery(
@@ -399,6 +411,24 @@ export default function Admin() {
                                       <SelectItem value="admin">Администратор</SelectItem>
                                     </SelectContent>
                                   </Select>
+                                  {u.role === "representative" && (
+                                    <Select
+                                      onValueChange={(instId) =>
+                                        assignRepresentative.mutate({ userId: u.id, institutionId: parseInt(instId) })
+                                      }
+                                    >
+                                      <SelectTrigger className="h-7 text-xs w-44">
+                                        <SelectValue placeholder="Учреждение..." />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {allInstsData?.items.map((inst: any) => (
+                                          <SelectItem key={inst.id} value={String(inst.id)}>
+                                            {inst.name}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  )}
                                   <Button
                                     variant="ghost"
                                     size="sm"
@@ -458,6 +488,14 @@ export default function Admin() {
                         {pub.notes && <p className="text-sm text-muted-foreground">{pub.notes}</p>}
                       </div>
                       <div className="flex gap-2 shrink-0">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 text-xs"
+                          onClick={() => setViewPub(pub)}
+                        >
+                          Просмотреть
+                        </Button>
                         <Button
                           size="sm"
                           className="bg-green-600 hover:bg-green-700 text-white h-8"
@@ -579,6 +617,72 @@ export default function Admin() {
           </div>
         )}
       </div>
+
+      {/* Диалог просмотра заявки */}
+      <Dialog open={!!viewPub} onOpenChange={(v) => { if (!v) setViewPub(null); }}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Заявка на публикацию #{viewPub?.id}</DialogTitle>
+            <DialogDescription>
+              Редактор: {viewPub?.editor?.name ?? "—"} · {viewPub?.createdAt ? new Date(viewPub.createdAt).toLocaleDateString("ru-RU") : ""}
+            </DialogDescription>
+          </DialogHeader>
+          {viewPub?.institution && (
+            <div className="space-y-3 text-sm">
+              <div className="grid grid-cols-2 gap-3">
+                <div><p className="text-xs text-muted-foreground mb-0.5">Название</p><p className="font-medium">{viewPub.institution.name}</p></div>
+                <div><p className="text-xs text-muted-foreground mb-0.5">Тип</p><p>{viewPub.institution.type}</p></div>
+                <div><p className="text-xs text-muted-foreground mb-0.5">Город</p><p>{viewPub.institution.city}</p></div>
+                <div><p className="text-xs text-muted-foreground mb-0.5">Статус</p><p>{viewPub.institution.status}</p></div>
+              </div>
+              {viewPub.institution.shortDescription && (
+                <div><p className="text-xs text-muted-foreground mb-0.5">Краткое описание</p><p>{viewPub.institution.shortDescription}</p></div>
+              )}
+              {viewPub.institution.address && (
+                <div><p className="text-xs text-muted-foreground mb-0.5">Адрес</p><p>{viewPub.institution.address}</p></div>
+              )}
+              {viewPub.institution.phone && (
+                <div><p className="text-xs text-muted-foreground mb-0.5">Телефон</p><p>{viewPub.institution.phone}</p></div>
+              )}
+              {viewPub.institution.website && (
+                <div><p className="text-xs text-muted-foreground mb-0.5">Сайт</p>
+                  <a href={viewPub.institution.website} target="_blank" rel="noopener noreferrer" className="text-[var(--color-brand-navy)] hover:underline">{viewPub.institution.website}</a>
+                </div>
+              )}
+              <div className="pt-2">
+                <a href={`/institution/${viewPub.institution.slug}`} target="_blank" rel="noopener noreferrer">
+                  <Button variant="outline" size="sm">Открыть страницу учреждения ↗</Button>
+                </a>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2 mt-2">
+            <Button variant="outline" onClick={() => setViewPub(null)}>Закрыть</Button>
+            <Button
+              className="bg-green-600 hover:bg-green-700 text-white"
+              onClick={() => {
+                approvePublication.mutate({ id: viewPub.id, institutionId: viewPub.institutionId });
+                setViewPub(null);
+              }}
+            >
+              <CheckCircle2 className="w-4 h-4 mr-1.5" />
+              Одобрить
+            </Button>
+            <Button
+              variant="outline"
+              className="border-red-200 text-red-600"
+              onClick={() => {
+                setViewPub(null);
+                setRejectReason("");
+                setRejectDialog({ pubId: viewPub.id, institutionId: viewPub.institutionId });
+              }}
+            >
+              <XCircle className="w-4 h-4 mr-1.5" />
+              Отклонить
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Диалог отказа с причиной */}
       <Dialog
