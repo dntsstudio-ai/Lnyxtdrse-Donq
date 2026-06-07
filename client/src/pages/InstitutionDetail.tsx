@@ -28,6 +28,7 @@ import {
   Send,
   Share2,
   Star,
+  Trash2,
   User,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -112,6 +113,12 @@ export default function InstitutionDetail() {
       setReviewRating(0);
       utils.reviews.list.invalidate({ institutionId: inst?.id ?? 0 });
       toast.success("Отзыв добавлен");
+    },
+  });
+  const deleteReview = trpc.reviews.delete.useMutation({
+    onSuccess: () => {
+      utils.reviews.list.invalidate({ institutionId: inst?.id ?? 0 });
+      toast.success("Отзыв удалён");
     },
   });
   const addReply = trpc.reviews.addReply.useMutation({
@@ -353,41 +360,62 @@ export default function InstitutionDetail() {
             )}
 
             {/* Map */}
-            {inst.lat && inst.lng && (
+            {(inst.lat && inst.lng) || inst.address ? (
               <div>
                 <h2 className="font-serif text-xl font-semibold mb-4">Расположение</h2>
-                <div className="rounded-2xl overflow-hidden border border-border" style={{ height: 360 }}>
-                  <MapView
-                    onMapReady={(map) => {
-                      const lat = parseFloat(String(inst.lat));
-                      const lng = parseFloat(String(inst.lng));
-                      const center = { lat, lng };
-                      map.setCenter(center);
-                      map.setZoom(15);
+                {inst.lat && inst.lng ? (
+                  <div className="rounded-2xl overflow-hidden border border-border relative group" style={{ height: 360 }}>
+                    <MapView
+                      onMapReady={(map) => {
+                        const lat = parseFloat(String(inst.lat));
+                        const lng = parseFloat(String(inst.lng));
+                        const center = { lat, lng };
+                        map.setCenter(center);
+                        map.setZoom(15);
 
-                      const marker = new google.maps.Marker({
-                        position: center,
-                        map,
-                        title: inst.name,
-                        icon: {
-                          path: google.maps.SymbolPath.CIRCLE,
-                          scale: 10,
-                          fillColor: "#1a2a4a",
-                          fillOpacity: 1,
-                          strokeColor: "#c9a84c",
-                          strokeWeight: 2,
-                        },
-                      });
+                        const marker = new google.maps.Marker({
+                          position: center,
+                          map,
+                          title: inst.name,
+                          icon: {
+                            path: google.maps.SymbolPath.CIRCLE,
+                            scale: 10,
+                            fillColor: "#1a2a4a",
+                            fillOpacity: 1,
+                            strokeColor: "#c9a84c",
+                            strokeWeight: 2,
+                          },
+                        });
 
-                      const infoWindow = new google.maps.InfoWindow({
-                        content: `<div style="font-family:sans-serif;padding:4px 2px"><strong>${inst.name}</strong><br/><small>${inst.address ?? ""}</small></div>`,
-                      });
+                        const infoWindow = new google.maps.InfoWindow({
+                          content: `<div style="font-family:sans-serif;padding:4px 2px"><strong>${inst.name}</strong><br/><small>${inst.address ?? ""}</small></div>`,
+                        });
 
-                      marker.addListener("click", () => infoWindow.open(map, marker));
-                      infoWindow.open(map, marker);
-                    }}
-                  />
-                </div>
+                        marker.addListener("click", () => infoWindow.open(map, marker));
+                        infoWindow.open(map, marker);
+                      }}
+                    />
+                    {/* Кнопки открытия в картах */}
+                    <div className="absolute bottom-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <a
+                        href={`https://yandex.ru/maps/?text=${encodeURIComponent(inst.address ?? inst.name)}&ll=${inst.lng},${inst.lat}&z=15`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1.5 bg-white rounded-lg shadow-md text-xs font-medium text-[var(--color-brand-navy)] hover:bg-[var(--color-brand-navy)] hover:text-white transition-colors border border-border"
+                      >
+                        Яндекс Карты
+                      </a>
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((inst.address ? `${inst.address}, ` : "") + inst.name)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1.5 bg-white rounded-lg shadow-md text-xs font-medium text-[var(--color-brand-navy)] hover:bg-[var(--color-brand-navy)] hover:text-white transition-colors border border-border"
+                      >
+                        Google Maps
+                      </a>
+                    </div>
+                  </div>
+                ) : null}
                 {inst.address && (
                   <p className="flex items-start gap-2 text-sm text-muted-foreground mt-2.5">
                     <MapPin className="w-4 h-4 text-[var(--color-brand-gold)] mt-0.5 shrink-0" />
@@ -395,7 +423,7 @@ export default function InstitutionDetail() {
                   </p>
                 )}
               </div>
-            )}
+            ) : null}
 
             {/* Reviews */}
             <div>
@@ -458,9 +486,20 @@ export default function InstitutionDetail() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2">
                             <span className="font-medium text-sm">{review.user?.name ?? "Аноним"}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {new Date(review.createdAt).toLocaleDateString("ru-RU")}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(review.createdAt).toLocaleDateString("ru-RU")}
+                              </span>
+                              {isEditorOrAdmin && (
+                                <button
+                                  onClick={() => { if (confirm("Удалить отзыв?")) deleteReview.mutate({ id: review.id }); }}
+                                  className="text-red-400 hover:text-red-600 transition-colors"
+                                  title="Удалить отзыв"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
                           </div>
                           <StarRating value={review.rating} />
                         </div>
@@ -652,7 +691,7 @@ export default function InstitutionDetail() {
             {(isEditorOrAdmin || isRepresentative) && (
               <div className="edu-card p-4">
                 <h3 className="font-medium text-sm mb-3 text-muted-foreground uppercase tracking-wide">Управление</h3>
-                <Link href={`/editor/institution/${inst.id}`}>
+                <Link href={`/editor/institutions`}>
                   <Button size="sm" variant="outline" className="w-full">
                     Редактировать карточку
                   </Button>

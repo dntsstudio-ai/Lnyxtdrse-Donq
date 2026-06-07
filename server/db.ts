@@ -1064,13 +1064,13 @@ export async function createNotification(data: {
 
 export async function getUserNotifications(userId: number): Promise<Notification[]> {
   const db = getDb();
+  // orderBy+where требует составного индекса — сортируем в памяти
   const snap = await db
     .collection("notifications")
     .where("userId", "==", userId)
-    .orderBy("createdAt", "desc")
     .limit(50)
     .get();
-  return snap.docs.map((d) => {
+  const items = snap.docs.map((d) => {
     const data = d.data() as Record<string, unknown>;
     return normalize({
       id: data.id as number,
@@ -1083,6 +1083,7 @@ export async function getUserNotifications(userId: number): Promise<Notification
       createdAt: tsToDate(data.createdAt),
     });
   });
+  return items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
 
 export async function markNotificationRead(id: number): Promise<void> {

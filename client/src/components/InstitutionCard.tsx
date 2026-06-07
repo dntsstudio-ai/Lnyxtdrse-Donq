@@ -56,7 +56,7 @@ export default function InstitutionCard({
   compact = false,
 }: InstitutionCardProps) {
   return (
-    <Link href={`/institutions/${slug}`}>
+    <Link href={`/institution/${slug}`}>
       <article
         className={cn(
           "edu-card group cursor-pointer flex flex-col h-full",

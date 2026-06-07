@@ -286,7 +286,7 @@ export default function Admin() {
                     {instsData?.items.map((inst: any) => (
                       <tr key={inst.id} className="hover:bg-[var(--color-brand-warm)]/50 transition-colors">
                         <td className="px-4 py-3">
-                          <a href={`/institutions/${inst.slug}`} className="font-medium hover:text-[var(--color-brand-navy)] transition-colors">
+                          <a href={`/institution/${inst.slug}`} className="font-medium hover:text-[var(--color-brand-navy)] transition-colors">
                             {inst.name}
                           </a>
                         </td>
@@ -303,7 +303,7 @@ export default function Admin() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <a href={`/editor/institutions/${inst.id}`}>
+                            <a href={`/editor/institutions`}>
                               <Button variant="ghost" size="sm" className="text-xs h-7">Редактировать</Button>
                             </a>
                             <Button
