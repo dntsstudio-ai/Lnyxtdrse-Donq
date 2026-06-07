@@ -177,7 +177,27 @@ const institutionsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const id = await createInstitution({ ...input, createdBy: ctx.user.id });
+      // 1. Создаём учреждение со статусом "pending" сразу
+      const id = await createInstitution({ ...input, createdBy: ctx.user.id, status: "pending" });
+
+      // 2. Сразу создаём заявку на публикацию
+      const requestId = await createPublicationRequest(id, ctx.user.id);
+
+      // 3. Уведомляем всех администраторов
+      const inst = await getInstitutionById(id);
+      const admins = await getAdminUsers();
+      await Promise.all(
+        admins.map((admin) =>
+          createNotification({
+            userId: admin.id,
+            type: "publication_request",
+            title: "Новая заявка на публикацию",
+            message: `Редактор «${ctx.user.name ?? "Без имени"}» подал заявку на публикацию учреждения «${inst?.name ?? input.name}».`,
+            relatedId: requestId,
+          })
+        )
+      );
+
       return { id };
     }),
 

@@ -101,9 +101,11 @@ export default function Admin() {
     onError: () => toast.error("Ошибка привязки"),
   });
 
+  const [pubStatusFilter, setPubStatusFilter] = useState<"pending" | "approved" | "rejected" | "all">("pending");
+
   // Publications (moderation)
   const { data: pubsData, isLoading: pubsLoading } = trpc.publications.list.useQuery(
-    { status: "pending" },
+    { status: pubStatusFilter === "all" ? undefined : pubStatusFilter },
     { enabled: isAuthenticated && user?.role === "admin" && activeTab === "publications" }
   );
 
@@ -467,7 +469,29 @@ export default function Admin() {
         {/* ─── Publications (Moderation) ─────────────────────────────────────── */}
         {activeTab === "publications" && (
           <div>
-            <h2 className="font-serif text-xl font-semibold mb-5">Модерация публикаций</h2>
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="font-serif text-xl font-semibold">Модерация публикаций</h2>
+              <div className="flex gap-1 bg-muted rounded-lg p-1">
+                {([
+                  { val: "pending", label: "На проверке" },
+                  { val: "approved", label: "Одобрены" },
+                  { val: "rejected", label: "Отклонены" },
+                  { val: "all", label: "Все" },
+                ] as const).map(({ val, label }) => (
+                  <button
+                    key={val}
+                    onClick={() => setPubStatusFilter(val)}
+                    className={`text-xs px-3 py-1.5 rounded-md font-medium transition-colors ${
+                      pubStatusFilter === val
+                        ? "bg-white shadow-sm text-[var(--color-brand-navy)]"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
             {pubsLoading ? (
               <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>
             ) : pubsData && pubsData.length > 0 ? (
@@ -481,10 +505,22 @@ export default function Admin() {
                           <Badge variant="outline" className="text-xs">
                             {pub.type === "new" ? "Новое" : pub.type === "edit" ? "Правка" : pub.type}
                           </Badge>
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                            pub.status === "approved" ? "bg-green-100 text-green-700" :
+                            pub.status === "rejected" ? "bg-red-100 text-red-700" :
+                            "bg-yellow-100 text-yellow-700"
+                          }`}>
+                            {pub.status === "approved" ? "Одобрено" : pub.status === "rejected" ? "Отклонено" : "На проверке"}
+                          </span>
                         </div>
                         <p className="text-xs text-muted-foreground mb-2">
                           Редактор: {pub.editor?.name ?? "—"} · {new Date(pub.createdAt).toLocaleDateString("ru-RU")}
                         </p>
+                        {pub.rejectionReason && (
+                          <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 mt-1">
+                            Причина отказа: {pub.rejectionReason}
+                          </p>
+                        )}
                         {pub.notes && <p className="text-sm text-muted-foreground">{pub.notes}</p>}
                       </div>
                       <div className="flex gap-2 shrink-0">

@@ -72,11 +72,19 @@ export default function Editor() {
     { enabled: isAuthenticated && (user?.role === "editor" || user?.role === "admin") && activeTab === "news" }
   );
 
+  const submitForReview = trpc.institutions.submitForReview.useMutation({
+    onSuccess: () => {
+      utils.institutions.list.invalidate();
+      toast.success("Заявка на публикацию отправлена администратору");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   const createInstitution = trpc.institutions.create.useMutation({
     onSuccess: () => {
       setInstSaved(true);
       utils.institutions.list.invalidate();
-      toast.success("Учреждение создано и отправлено на модерацию");
+      toast.success("Учреждение создано и отправлено на проверку администратору");
       setInstForm({ name: "", type: "university", city: "", address: "", phone: "", email: "", website: "", shortDescription: "", description: "", foundedYear: "", tuitionMin: "", tuitionMax: "", isFree: false, slug: "" });
       setTimeout(() => setInstSaved(false), 3000);
     },
@@ -325,10 +333,24 @@ export default function Editor() {
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                           inst.status === "published" ? "bg-green-100 text-green-700" :
                           inst.status === "pending" ? "bg-yellow-100 text-yellow-700" :
+                          inst.status === "rejected" ? "bg-red-100 text-red-700" :
                           "bg-gray-100 text-gray-600"
                         }`}>
-                          {inst.status === "published" ? "Опубл." : inst.status === "pending" ? "На проверке" : "Черновик"}
+                          {inst.status === "published" ? "Опубл." :
+                           inst.status === "pending" ? "На проверке" :
+                           inst.status === "rejected" ? "Отклонено" : "Черновик"}
                         </span>
+                        {(inst.status === "draft" || inst.status === "rejected") && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs text-blue-600 hover:bg-blue-50 px-2"
+                            disabled={submitForReview.isPending}
+                            onClick={() => submitForReview.mutate({ id: inst.id })}
+                          >
+                            Отправить
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"
