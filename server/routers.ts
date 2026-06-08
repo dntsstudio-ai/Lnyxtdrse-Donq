@@ -147,12 +147,17 @@ const institutionsRouter = router({
   getBySlug: publicProcedure
     .input(z.object({ slug: z.string() }))
     .query(async ({ input, ctx }) => {
+      if (!input.slug) throw new TRPCError({ code: "NOT_FOUND" });
       const inst = await getInstitutionBySlug(input.slug);
       if (!inst) throw new TRPCError({ code: "NOT_FOUND" });
-      if (inst.status !== "published") {
-        const isEditor = ctx.user && ["editor", "representative", "admin"].includes(ctx.user.role);
-        if (!isEditor) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const isEditor = ctx.user && ["editor", "representative", "admin"].includes(ctx.user.role);
+
+      // Неопубликованные видят только редакторы/админы
+      if (inst.status !== "published" && !isEditor) {
+        throw new TRPCError({ code: "NOT_FOUND" });
       }
+
       const [photos, documents, specializations, avgRating] = await Promise.all([
         getInstitutionPhotos(inst.id),
         getInstitutionDocuments(inst.id),
@@ -190,8 +195,14 @@ const institutionsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
+      // Гарантируем что slug всегда заполнен
+      const baseSlug = input.slug?.trim() ||
+        input.name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").slice(0, 60) ||
+        `inst`;
+      const slug = `${baseSlug}-${Date.now()}`;
+
       // 1. Создаём учреждение со статусом "pending" сразу
-      const id = await createInstitution({ ...input, createdBy: ctx.user.id, status: "pending" });
+      const id = await createInstitution({ ...input, slug, createdBy: ctx.user.id, status: "pending" });
 
       // 2. Сразу создаём заявку на публикацию
       const requestId = await createPublicationRequest(id, ctx.user.id);

@@ -94,9 +94,9 @@ export default function InstitutionDetail() {
   const [replyText, setReplyText] = useState<Record<number, string>>({});
   const [showReplyFor, setShowReplyFor] = useState<number | null>(null);
 
-  const { data: inst, isLoading } = trpc.institutions.getBySlug.useQuery(
+  const { data: inst, isLoading, isError } = trpc.institutions.getBySlug.useQuery(
     { slug: slug ?? "" },
-    { enabled: !!slug }
+    { enabled: !!slug, retry: false }
   );
   const { data: reviews } = trpc.reviews.list.useQuery(
     { institutionId: inst?.id ?? 0 },
@@ -152,14 +152,17 @@ export default function InstitutionDetail() {
     );
   }
 
-  if (!inst) {
+  if (!inst || isError) {
     return (
       <PageLayout>
         <div className="container py-20 text-center">
           <Building2 className="w-14 h-14 mx-auto mb-4 text-muted-foreground/30" />
           <h2 className="font-serif text-2xl font-semibold mb-2">Учреждение не найдено</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            Возможно, страница ещё не опубликована или адрес указан неверно.
+          </p>
           <Link href="/catalog">
-            <Button variant="outline" className="mt-4">
+            <Button variant="outline">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Вернуться в каталог
             </Button>
@@ -184,6 +187,26 @@ export default function InstitutionDetail() {
 
   return (
     <PageLayout>
+      {/* Статус-баннер для редакторов/админов */}
+      {isEditorOrAdmin && inst.status !== "published" && (
+        <div className={`border-b py-2.5 ${
+          inst.status === "pending" ? "bg-yellow-50 border-yellow-200" :
+          inst.status === "rejected" ? "bg-red-50 border-red-200" :
+          "bg-gray-50 border-gray-200"
+        }`}>
+          <div className="container flex items-center gap-3 text-sm">
+            <span className={`font-semibold ${
+              inst.status === "pending" ? "text-yellow-700" :
+              inst.status === "rejected" ? "text-red-700" : "text-gray-700"
+            }`}>
+              {inst.status === "pending" && "⏳ Карточка на модерации — видна только редакторам и администраторам"}
+              {inst.status === "rejected" && "❌ Карточка отклонена — исправьте и отправьте повторно"}
+              {inst.status === "draft" && "📝 Черновик — не опубликован"}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Breadcrumb */}
       <div className="bg-[var(--color-brand-warm)] border-b border-border">
         <div className="container py-3">

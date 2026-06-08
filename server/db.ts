@@ -495,14 +495,14 @@ export async function getInstitutionById(id: number): Promise<Institution | unde
 
 export async function getFeaturedInstitutions(): Promise<Institution[]> {
   const db = getDb();
+  // Два where без orderBy — не требует составного индекса
   const snap = await db
     .collection("institutions")
     .where("isFeatured", "==", true)
     .where("status", "==", "published")
-    .orderBy("featuredOrder")
-    .limit(5)
     .get();
-  return snap.docs.map((d) => docToInstitution(d.data() as Record<string, unknown>));
+  const items = snap.docs.map((d) => docToInstitution(d.data() as Record<string, unknown>));
+  return items.sort((a, b) => (a.featuredOrder ?? 0) - (b.featuredOrder ?? 0)).slice(0, 5);
 }
 
 export async function getTopInstitutions(limit = 5): Promise<Institution[]> {
