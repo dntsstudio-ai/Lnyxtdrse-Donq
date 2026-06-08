@@ -131,7 +131,7 @@ const institutionsRouter = router({
 
   getCities: publicProcedure.query(() => getDistinctCities()),
 
-  getById: editorProcedure
+  getByIdEditor: editorProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const inst = await getInstitutionById(input.id);
@@ -144,17 +144,45 @@ const institutionsRouter = router({
       return { ...inst, photos, documents, specializations };
     }),
 
+  getById: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input, ctx }) => {
+      const inst = await getInstitutionById(input.id);
+      if (!inst) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const isEditor = ctx.user && ["editor", "representative", "admin"].includes(ctx.user.role);
+      if (inst.status === "draft" && !isEditor) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+
+      const [photos, documents, specializations, avgRating] = await Promise.all([
+        getInstitutionPhotos(inst.id),
+        getInstitutionDocuments(inst.id),
+        getInstitutionSpecializations(inst.id),
+        getAverageRating(inst.id),
+      ]);
+      const bookmarked = ctx.user ? await isBookmarked(ctx.user.id, inst.id) : false;
+      return { ...inst, photos, documents, specializations, avgRating, bookmarked };
+    }),
+
   getBySlug: publicProcedure
     .input(z.object({ slug: z.string() }))
     .query(async ({ input, ctx }) => {
       if (!input.slug) throw new TRPCError({ code: "NOT_FOUND" });
+
+      console.log(`[getBySlug] Looking for slug: "${input.slug}"`);
       const inst = await getInstitutionBySlug(input.slug);
+      console.log(`[getBySlug] Result: ${inst ? `found id=${inst.id} status=${inst.status}` : "NOT FOUND"}`);
+
       if (!inst) throw new TRPCError({ code: "NOT_FOUND" });
 
       const isEditor = ctx.user && ["editor", "representative", "admin"].includes(ctx.user.role);
+      console.log(`[getBySlug] isEditor: ${isEditor}, status: ${inst.status}`);
 
-      // Неопубликованные видят только редакторы/админы
-      if (inst.status !== "published" && !isEditor) {
+      // Черновики (draft) недоступны анонимным пользователям
+      // Pending и rejected — доступны по прямой ссылке (нужно для просмотра на модерации)
+      if (inst.status === "draft" && !isEditor) {
+        console.log(`[getBySlug] Blocking draft access for anonymous user`);
         throw new TRPCError({ code: "NOT_FOUND" });
       }
 
@@ -195,10 +223,18 @@ const institutionsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      // Гарантируем что slug всегда заполнен
-      const baseSlug = input.slug?.trim() ||
-        input.name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").slice(0, 60) ||
-        `inst`;
+      // Транслитерация кириллицы для slug
+      const cyrMap: Record<string, string> = {
+        а:"a",б:"b",в:"v",г:"g",д:"d",е:"e",ё:"yo",ж:"zh",з:"z",и:"i",й:"y",
+        к:"k",л:"l",м:"m",н:"n",о:"o",п:"p",р:"r",с:"s",т:"t",у:"u",ф:"f",
+        х:"kh",ц:"ts",ч:"ch",ш:"sh",щ:"shch",ъ:"",ы:"y",ь:"",э:"e",ю:"yu",я:"ya",
+      };
+      const translit = (s: string) =>
+        s.toLowerCase().split("").map((c) => cyrMap[c] ?? c).join("")
+          .replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").replace(/-+/g, "-")
+          .replace(/^-|-$/g, "").slice(0, 60);
+
+      const baseSlug = translit(input.slug?.trim() || input.name) || "inst";
       const slug = `${baseSlug}-${Date.now()}`;
 
       // 1. Создаём учреждение со статусом "pending" сразу

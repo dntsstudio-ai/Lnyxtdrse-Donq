@@ -481,9 +481,21 @@ export async function listInstitutions(opts: {
 
 export async function getInstitutionBySlug(slug: string): Promise<Institution | undefined> {
   const db = getDb();
-  const snap = await db.collection("institutions").where("slug", "==", slug).limit(1).get();
-  if (snap.empty) return undefined;
-  return docToInstitution(snap.docs[0]!.data() as Record<string, unknown>);
+  try {
+    // Сначала пробуем через where (быстро)
+    const snap = await db.collection("institutions").where("slug", "==", slug).limit(1).get();
+    if (!snap.empty) {
+      return docToInstitution(snap.docs[0]!.data() as Record<string, unknown>);
+    }
+  } catch (err) {
+    console.warn("[getInstitutionBySlug] where() failed, falling back to scan:", err);
+  }
+
+  // Fallback: полный скан (медленнее, но надёжнее если индекс не создан)
+  const allSnap = await db.collection("institutions").get();
+  const doc = allSnap.docs.find((d) => d.data().slug === slug);
+  if (!doc) return undefined;
+  return docToInstitution(doc.data() as Record<string, unknown>);
 }
 
 export async function getInstitutionById(id: number): Promise<Institution | undefined> {
