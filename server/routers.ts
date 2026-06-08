@@ -131,6 +131,19 @@ const institutionsRouter = router({
 
   getCities: publicProcedure.query(() => getDistinctCities()),
 
+  getById: editorProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }) => {
+      const inst = await getInstitutionById(input.id);
+      if (!inst) throw new TRPCError({ code: "NOT_FOUND" });
+      const [photos, documents, specializations] = await Promise.all([
+        getInstitutionPhotos(inst.id),
+        getInstitutionDocuments(inst.id),
+        getInstitutionSpecializations(inst.id),
+      ]);
+      return { ...inst, photos, documents, specializations };
+    }),
+
   getBySlug: publicProcedure
     .input(z.object({ slug: z.string() }))
     .query(async ({ input, ctx }) => {
