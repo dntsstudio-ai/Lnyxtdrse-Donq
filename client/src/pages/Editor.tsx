@@ -655,12 +655,6 @@ export default function Editor() {
     navigate("/editor/institutions");
   };
 
-  // ID выбранного учреждения для редактирования (может прийти из URL /editor/institutions/:id)
-  const [editInstId, setEditInstId] = useState<number | null>(() => {
-    const idFromUrl = params.id ? parseInt(params.id) : null;
-    return idFromUrl && !isNaN(idFromUrl) ? idFromUrl : null;
-  });
-
   // Форма создания нового учреждения
   const [instForm, setInstForm] = useState(EMPTY_FORM);
   const [instSaved, setInstSaved] = useState(false);
