@@ -40,6 +40,7 @@ interface InstitutionCardProps {
 }
 
 export default function InstitutionCard({
+  id,
   slug,
   name,
   type,
