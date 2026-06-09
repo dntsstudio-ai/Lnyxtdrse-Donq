@@ -15,7 +15,7 @@ import {
   Image, Phone, Globe, MapPin, Calendar, Users,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useParams } from "wouter";
+import { useParams, useLocation } from "wouter";
 import { toast } from "sonner";
 
 const EDITOR_TABS = [
@@ -90,6 +90,9 @@ function InstitutionEditModal({
       setSaved(true);
       utils.institutions.list.invalidate();
       utils.institutions.getByIdEditor.invalidate({ id: instId });
+      // Инвалидируем публичные запросы чтобы страница карточки обновилась
+      utils.institutions.getById.invalidate({ id: instId });
+      utils.institutions.getBySlug.invalidate();
       toast.success("Карточка сохранена");
       setTimeout(() => setSaved(false), 2500);
     },
@@ -108,13 +111,19 @@ function InstitutionEditModal({
   const updateSpecs = trpc.institutions.updateSpecializations.useMutation({
     onSuccess: () => {
       utils.institutions.getByIdEditor.invalidate({ id: instId });
+      utils.institutions.getById.invalidate({ id: instId });
+      utils.institutions.getBySlug.invalidate();
       toast.success("Специальности сохранены");
     },
     onError: (e) => toast.error(e.message),
   });
 
   const deletePhoto = trpc.institutions.deletePhoto.useMutation({
-    onSuccess: () => utils.institutions.getByIdEditor.invalidate({ id: instId }),
+    onSuccess: () => {
+      utils.institutions.getByIdEditor.invalidate({ id: instId });
+      utils.institutions.getById.invalidate({ id: instId });
+      utils.institutions.getBySlug.invalidate();
+    },
   });
 
   const submitForReview = trpc.institutions.submitForReview.useMutation({
@@ -627,14 +636,30 @@ export default function Editor() {
   const { user, isAuthenticated, loading } = useAuth();
   const { openAuthModal } = useFirebaseAuth();
   const params = useParams<{ section?: string; id?: string }>();
+  const [, navigate] = useLocation();
   const [activeTab, setActiveTab] = useState(() => {
     if (params.section === "news") return "news";
     return "institutions";
   });
   const utils = trpc.useUtils();
 
-  // ID выбранного учреждения для редактирования
-  const [editInstId, setEditInstId] = useState<number | null>(null);
+  // ID выбранного учреждения для редактирования (может прийти из URL /editor/institutions/:id)
+  const [editInstId, setEditInstId] = useState<number | null>(() => {
+    const idFromUrl = params.id ? parseInt(params.id) : null;
+    return idFromUrl && !isNaN(idFromUrl) ? idFromUrl : null;
+  });
+
+  // Когда модалка закрывается — сбрасываем URL обратно на /editor/institutions
+  const handleCloseEditModal = () => {
+    setEditInstId(null);
+    navigate("/editor/institutions");
+  };
+
+  // ID выбранного учреждения для редактирования (может прийти из URL /editor/institutions/:id)
+  const [editInstId, setEditInstId] = useState<number | null>(() => {
+    const idFromUrl = params.id ? parseInt(params.id) : null;
+    return idFromUrl && !isNaN(idFromUrl) ? idFromUrl : null;
+  });
 
   // Форма создания нового учреждения
   const [instForm, setInstForm] = useState(EMPTY_FORM);
@@ -1036,7 +1061,7 @@ export default function Editor() {
       {editInstId !== null && (
         <InstitutionEditModal
           instId={editInstId}
-          onClose={() => setEditInstId(null)}
+          onClose={handleCloseEditModal}
         />
       )}
     </PageLayout>

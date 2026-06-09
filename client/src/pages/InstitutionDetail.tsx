@@ -192,7 +192,7 @@ export default function InstitutionDetail() {
                 Учреждение создано, но информация ещё не добавлена. Перейдите в панель редактора чтобы заполнить карточку.
               </p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                <Link href="/editor/institutions">
+                <Link href={`/editor/institutions/${numericId ?? ""}`}>
                   <Button className="bg-[var(--color-brand-navy)] text-white px-6">
                     <PenLine className="w-4 h-4 mr-2" />
                     Заполнить карточку
@@ -258,7 +258,7 @@ export default function InstitutionDetail() {
                 </Button>
               </Link>
             ) : (
-              <Link href="/editor/institutions">
+              <Link href={`/editor/institutions/${inst.id}`}>
                 <Button size="sm" className="bg-[var(--color-brand-gold)] hover:bg-[var(--color-brand-gold)]/90 text-[var(--color-brand-navy)] font-semibold shrink-0">
                   Заполнить карточку
                 </Button>
@@ -795,11 +795,19 @@ export default function InstitutionDetail() {
             {(isEditorOrAdmin || isRepresentative) && (
               <div className="edu-card p-4">
                 <h3 className="font-medium text-sm mb-3 text-muted-foreground uppercase tracking-wide">Управление</h3>
-                <Link href={`/editor/institutions`}>
-                  <Button size="sm" variant="outline" className="w-full">
-                    Редактировать карточку
-                  </Button>
-                </Link>
+                {isRepresentative ? (
+                  <Link href="/representative">
+                    <Button size="sm" variant="outline" className="w-full">
+                      Редактировать карточку
+                    </Button>
+                  </Link>
+                ) : (
+                  <Link href={`/editor/institutions/${inst.id}`}>
+                    <Button size="sm" variant="outline" className="w-full">
+                      Редактировать карточку
+                    </Button>
+                  </Link>
+                )}
               </div>
             )}
           </div>

@@ -18,7 +18,7 @@ import {
   Upload,
   Trash2,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { toast } from "sonner";
 
@@ -56,18 +56,35 @@ export default function Representative() {
   const docs = instWithDocs?.documents ?? [];
 
   const [form, setForm] = useState({
-    shortDescription: myInst?.shortDescription ?? "",
-    description: myInst?.description ?? "",
-    phone: myInst?.phone ?? "",
-    email: myInst?.email ?? "",
-    website: myInst?.website ?? "",
-    address: myInst?.address ?? "",
+    shortDescription: "",
+    description: "",
+    phone: "",
+    email: "",
+    website: "",
+    address: "",
   });
+
+  // Синхронизируем форму когда данные учреждения загрузились из БД
+  useEffect(() => {
+    if (!myInst) return;
+    setForm({
+      shortDescription: myInst.shortDescription ?? "",
+      description: myInst.description ?? "",
+      phone: myInst.phone ?? "",
+      email: myInst.email ?? "",
+      website: myInst.website ?? "",
+      address: myInst.address ?? "",
+    });
+  }, [myInst?.id]);
 
   const updateInst = trpc.institutions.update.useMutation({
     onSuccess: () => {
       setSaved(true);
       utils.institutions.list.invalidate();
+      if (myInst?.id) {
+        utils.institutions.getById.invalidate({ id: myInst.id });
+        utils.institutions.getBySlug.invalidate();
+      }
       toast.success("Профиль обновлён");
       setTimeout(() => setSaved(false), 3000);
     },
