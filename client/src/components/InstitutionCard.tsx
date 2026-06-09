@@ -56,7 +56,7 @@ export default function InstitutionCard({
   compact = false,
 }: InstitutionCardProps) {
   return (
-    <Link href={`/institution/${slug}`}>
+    <Link href={slug && slug.length > 1 && /[a-z0-9]/.test(slug) ? `/institution/${slug}` : `/institution/id/${id}`}>
       <article
         className={cn(
           "edu-card group cursor-pointer flex flex-col h-full",

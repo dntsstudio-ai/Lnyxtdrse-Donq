@@ -83,7 +83,7 @@ function StarRating({ value, onChange }: { value: number; onChange?: (v: number)
 }
 
 export default function InstitutionDetail() {
-  const { slug } = useParams<{ slug: string }>();
+  const params = useParams<{ slug?: string; numId?: string }>();
   const { user, isAuthenticated } = useAuth();
   const utils = trpc.useUtils();
 
@@ -94,10 +94,26 @@ export default function InstitutionDetail() {
   const [replyText, setReplyText] = useState<Record<number, string>>({});
   const [showReplyFor, setShowReplyFor] = useState<number | null>(null);
 
-  const { data: inst, isLoading, isError } = trpc.institutions.getBySlug.useQuery(
-    { slug: slug ?? "" },
-    { enabled: !!slug, retry: false }
-  );
+  // Поддержка двух режимов: /institution/:slug и /institution/id/:numId
+  const numericId = params.numId ? parseInt(params.numId) : null;
+  const slugParam = params.slug ?? null;
+
+  const { data: instBySlug, isLoading: loadingBySlug, isError: errorBySlug } =
+    trpc.institutions.getBySlug.useQuery(
+      { slug: slugParam ?? "" },
+      { enabled: !!slugParam && !numericId, retry: false }
+    );
+
+  const { data: instById, isLoading: loadingById, isError: errorById } =
+    trpc.institutions.getById.useQuery(
+      { id: numericId ?? 0 },
+      { enabled: !!numericId, retry: false }
+    );
+
+  const inst = instBySlug ?? instById ?? null;
+  const isLoading = loadingBySlug || loadingById;
+  const isError = (!numericId && errorBySlug) || (!!numericId && errorById);
+
   const { data: reviews } = trpc.reviews.list.useQuery(
     { institutionId: inst?.id ?? 0 },
     { enabled: !!inst?.id }
@@ -105,7 +121,7 @@ export default function InstitutionDetail() {
 
   const incrementView = trpc.institutions.incrementView.useMutation();
   const bookmarkToggle = trpc.bookmarks.toggle.useMutation({
-    onSuccess: () => utils.institutions.getBySlug.invalidate({ slug: slug ?? "" }),
+    onSuccess: () => utils.institutions.getBySlug.invalidate({ slug: slugParam ?? "" }),
   });
   const createReview = trpc.reviews.create.useMutation({
     onSuccess: () => {

@@ -286,7 +286,7 @@ export default function Admin() {
                     {instsData?.items.map((inst: any) => (
                       <tr key={inst.id} className="hover:bg-[var(--color-brand-warm)]/50 transition-colors">
                         <td className="px-4 py-3">
-                          <a href={`/institution/${inst.slug}`} className="font-medium hover:text-[var(--color-brand-navy)] transition-colors">
+                          <a href={inst.slug && inst.slug.length > 1 && /[a-z0-9]/.test(inst.slug) ? `/institution/${inst.slug}` : `/institution/id/${inst.id}`} className="font-medium hover:text-[var(--color-brand-navy)] transition-colors">
                             {inst.name}
                           </a>
                         </td>
@@ -686,7 +686,7 @@ export default function Admin() {
                 </div>
               )}
               <div className="pt-2">
-                <a href={`/institution/${viewPub.institution.slug}`} target="_blank" rel="noopener noreferrer">
+                <a href={viewPub.institution?.slug && viewPub.institution.slug.length > 1 && /[a-z0-9]/.test(viewPub.institution.slug) ? `/institution/${viewPub.institution.slug}` : `/institution/id/${viewPub.institution?.id}`} target="_blank" rel="noopener noreferrer">
                   <Button variant="outline" size="sm">Открыть страницу учреждения ↗</Button>
                 </a>
               </div>

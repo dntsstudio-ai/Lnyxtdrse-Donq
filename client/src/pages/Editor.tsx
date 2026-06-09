@@ -830,7 +830,7 @@ export default function Editor() {
                       name: instForm.name,
                       type: instForm.type as any,
                       city: instForm.city,
-                      slug: instForm.slug || generateSlug(instForm.name) || `inst-${Date.now()}`,
+                      // slug не передаём — сервер сгенерирует сам через транслитерацию
                     })
                   }
                 >
