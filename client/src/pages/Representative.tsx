@@ -16,6 +16,7 @@ import {
   Shield,
   Star,
   Upload,
+  Trash2,
 } from "lucide-react";
 import { useRef, useState } from "react";
 
@@ -38,8 +39,8 @@ export default function Representative() {
   const utils = trpc.useUtils();
 
   const { data: myInstData, isLoading: instLoading } = trpc.institutions.list.useQuery(
-    { page: 1, limit: 1 },
-    { enabled: isAuthenticated && (user?.role === "representative" || user?.role === "admin") }
+    { page: 1, limit: 1, representativeId: user?.id },
+    { enabled: isAuthenticated && (user?.role === "representative" || user?.role === "admin") && !!user?.id }
   );
   const myInst = myInstData?.items?.[0] ?? null;
 
@@ -48,8 +49,11 @@ export default function Representative() {
     { enabled: !!myInst?.id && activeTab === "reviews" }
   );
 
-  const docs: any[] = [];
-  const docsLoading = false;
+  const { data: instWithDocs, isLoading: docsLoading } = trpc.institutions.getByIdEditor.useQuery(
+    { id: myInst?.id ?? 0 },
+    { enabled: !!myInst?.id && activeTab === "documents" }
+  );
+  const docs = instWithDocs?.documents ?? [];
 
   const [form, setForm] = useState({
     shortDescription: myInst?.shortDescription ?? "",
@@ -78,7 +82,22 @@ export default function Representative() {
     },
   });
 
+  const deleteDoc = trpc.institutions.deleteDocument.useMutation({
+    onSuccess: () => {
+      utils.institutions.getByIdEditor.invalidate({ id: myInst?.id ?? 0 });
+      toast.success("Документ удалён");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   const getUploadUrl = trpc.uploads.getUploadUrl.useMutation();
+  const addDoc = trpc.institutions.addDocument.useMutation({
+    onSuccess: () => {
+      utils.institutions.getByIdEditor.invalidate({ id: myInst?.id ?? 0 });
+      toast.success("Документ добавлен");
+    },
+    onError: (err) => toast.error(err.message),
+  });
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -92,9 +111,31 @@ export default function Representative() {
       });
       const formData = new FormData();
       formData.append("file", file);
-      await fetch(uploadPath, { method: "POST", body: formData });
-      toast.success("Файл загружен");
-    } catch {
+      const response = await fetch(uploadPath, { method: "POST", body: formData });
+      const uploadedUrl = await response.text();
+      
+      const docType = file.name.split(".").pop()?.toLowerCase() || "other";
+      const typeMap: Record<string, any> = {
+        pdf: "brochure",
+        doc: "certificate",
+        docx: "certificate",
+        jpg: "other",
+        jpeg: "other",
+        png: "other",
+      };
+      
+      await addDoc.mutateAsync({
+        institutionId: myInst.id,
+        type: typeMap[docType] || "other",
+        url: uploadedUrl,
+        fileKey: file.name,
+        name: file.name,
+      });
+      
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    } catch (err) {
       toast.error("Ошибка загрузки файла");
     } finally {
       setUploading(false);
@@ -330,10 +371,10 @@ export default function Representative() {
               <Button
                 className="bg-[var(--color-brand-navy)] text-white"
                 size="sm"
-                disabled={uploading}
+                disabled={uploading || addDoc.isPending}
                 onClick={() => fileInputRef.current?.click()}
               >
-                {uploading ? (
+                {uploading || addDoc.isPending ? (
                   <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Загрузка...</>
                 ) : (
                   <><Upload className="w-4 h-4 mr-2" />Загрузить файл</>
@@ -366,13 +407,28 @@ export default function Representative() {
                         <FileUp className="w-4 h-4 text-[var(--color-brand-navy)]" />
                       </div>
                       <div>
-                        <p className="text-sm font-medium">{doc.filename}</p>
-                        <p className="text-xs text-muted-foreground">{doc.docType} · {new Date(doc.createdAt).toLocaleDateString("ru-RU")}</p>
+                        <p className="text-sm font-medium">{doc.name}</p>
+                        <p className="text-xs text-muted-foreground">{doc.type} · {new Date(doc.createdAt).toLocaleDateString("ru-RU")}</p>
                       </div>
                     </div>
-                    <a href={doc.url} target="_blank" rel="noopener noreferrer">
-                      <Button variant="ghost" size="sm" className="text-xs h-7">Открыть</Button>
-                    </a>
+                    <div className="flex items-center gap-2">
+                      <a href={doc.url} target="_blank" rel="noopener noreferrer">
+                        <Button variant="ghost" size="sm" className="text-xs h-7">Открыть</Button>
+                      </a>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs h-7 text-red-500 hover:bg-red-50"
+                        disabled={deleteDoc.isPending}
+                        onClick={() => {
+                          if (confirm("Удалить документ?")) {
+                            deleteDoc.mutate({ id: doc.id });
+                          }
+                        }}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>

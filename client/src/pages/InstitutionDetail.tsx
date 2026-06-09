@@ -238,8 +238,8 @@ export default function InstitutionDetail() {
   const isRepresentative = user?.role === "representative" && inst.representativeId === user.id;
   const isEditorOrAdmin = user?.role === "editor" || user?.role === "admin";
 
-  // Карточка пустая — нет описания и фото
-  const isEmpty = !inst.shortDescription && !inst.description && (!inst.photos || inst.photos.length === 0);
+  // Карточка пустая — нет основной информации
+  const isEmpty = !inst.shortDescription && !inst.description && (!inst.photos || inst.photos.length === 0) && !inst.address && !inst.phone && !inst.email && (!inst.specializations || inst.specializations.length === 0);
 
   return (
     <PageLayout>
@@ -251,11 +251,19 @@ export default function InstitutionDetail() {
               <PenLine className="w-4 h-4 text-[var(--color-brand-gold)] shrink-0" />
               <span>Карточка пустая — добавьте описание, контакты и фотографии</span>
             </div>
-            <Link href="/editor/institutions">
-              <Button size="sm" className="bg-[var(--color-brand-gold)] hover:bg-[var(--color-brand-gold)]/90 text-[var(--color-brand-navy)] font-semibold shrink-0">
-                Заполнить карточку
-              </Button>
-            </Link>
+            {isRepresentative ? (
+              <Link href="/representative">
+                <Button size="sm" className="bg-[var(--color-brand-gold)] hover:bg-[var(--color-brand-gold)]/90 text-[var(--color-brand-navy)] font-semibold shrink-0">
+                  Заполнить карточку
+                </Button>
+              </Link>
+            ) : (
+              <Link href="/editor/institutions">
+                <Button size="sm" className="bg-[var(--color-brand-gold)] hover:bg-[var(--color-brand-gold)]/90 text-[var(--color-brand-navy)] font-semibold shrink-0">
+                  Заполнить карточку
+                </Button>
+              </Link>
+            )}
           </div>
         </div>
       )}

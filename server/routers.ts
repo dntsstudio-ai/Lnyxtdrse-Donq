@@ -115,6 +115,7 @@ const institutionsRouter = router({
         limit: z.number().default(12),
         sortBy: z.enum(["name", "views", "newest"]).default("views"),
         editorView: z.boolean().optional(),
+        representativeId: z.number().optional(),
       })
     )
     .query(async ({ input, ctx }) => {
@@ -133,9 +134,12 @@ const institutionsRouter = router({
 
   getByIdEditor: editorProcedure
     .input(z.object({ id: z.number() }))
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       const inst = await getInstitutionById(input.id);
       if (!inst) throw new TRPCError({ code: "NOT_FOUND" });
+      if (ctx.user.role === "representative" && inst.representativeId !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
       const [photos, documents, specializations] = await Promise.all([
         getInstitutionPhotos(inst.id),
         getInstitutionDocuments(inst.id),
@@ -365,7 +369,12 @@ const institutionsRouter = router({
         ),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      const inst = await getInstitutionById(input.institutionId);
+      if (!inst) throw new TRPCError({ code: "NOT_FOUND" });
+      if (ctx.user.role === "representative" && inst.representativeId !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
       await upsertSpecializations(input.institutionId, input.specializations);
       return { success: true };
     }),
@@ -380,14 +389,27 @@ const institutionsRouter = router({
         displayOrder: z.number().optional(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      const inst = await getInstitutionById(input.institutionId);
+      if (!inst) throw new TRPCError({ code: "NOT_FOUND" });
+      if (ctx.user.role === "representative" && inst.representativeId !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
       await addInstitutionPhoto(input);
       return { success: true };
     }),
 
   deletePhoto: editorProcedure
     .input(z.object({ id: z.number() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      const photos = await getInstitutionPhotos(0);
+      const photo = photos.find((p) => p.id === input.id);
+      if (!photo) throw new TRPCError({ code: "NOT_FOUND" });
+      const inst = await getInstitutionById(photo.institutionId);
+      if (!inst) throw new TRPCError({ code: "NOT_FOUND" });
+      if (ctx.user.role === "representative" && inst.representativeId !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
       await deleteInstitutionPhoto(input.id);
       return { success: true };
     }),
@@ -402,14 +424,27 @@ const institutionsRouter = router({
         name: z.string(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      const inst = await getInstitutionById(input.institutionId);
+      if (!inst) throw new TRPCError({ code: "NOT_FOUND" });
+      if (ctx.user.role === "representative" && inst.representativeId !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
       await addInstitutionDocument(input);
       return { success: true };
     }),
 
   deleteDocument: editorProcedure
     .input(z.object({ id: z.number() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      const docs = await getInstitutionDocuments(0);
+      const doc = docs.find((d) => d.id === input.id);
+      if (!doc) throw new TRPCError({ code: "NOT_FOUND" });
+      const inst = await getInstitutionById(doc.institutionId);
+      if (!inst) throw new TRPCError({ code: "NOT_FOUND" });
+      if (ctx.user.role === "representative" && inst.representativeId !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
       await deleteInstitutionDocument(input.id);
       return { success: true };
     }),
@@ -459,7 +494,15 @@ const reviewsRouter = router({
 
   addReply: representativeProcedure
     .input(z.object({ reviewId: z.number(), reply: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      const reviews = await getReviews(0);
+      const review = reviews.find((r) => r.id === input.reviewId);
+      if (!review) throw new TRPCError({ code: "NOT_FOUND" });
+      const inst = await getInstitutionById(review.institutionId);
+      if (!inst) throw new TRPCError({ code: "NOT_FOUND" });
+      if (ctx.user.role === "representative" && inst.representativeId !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
       await addReviewReply(input.reviewId, input.reply);
       return { success: true };
     }),

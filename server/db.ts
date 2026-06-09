@@ -437,6 +437,7 @@ export async function listInstitutions(opts: {
   page?: number;
   limit?: number;
   sortBy?: "name" | "views" | "newest";
+  representativeId?: number;
 }): Promise<{ items: Institution[]; total: number }> {
   const db = getDb();
   let q: FirebaseFirestore.Query = db.collection("institutions");
@@ -444,6 +445,7 @@ export async function listInstitutions(opts: {
   if (opts.status) q = q.where("status", "==", opts.status);
   if (opts.city) q = q.where("city", "==", opts.city);
   if (opts.type) q = q.where("type", "==", opts.type);
+  if (opts.representativeId) q = q.where("representativeId", "==", opts.representativeId);
 
   // Firestore не поддерживает LIKE — делаем фильтрацию в памяти после получения
   const snap = await q.get();
