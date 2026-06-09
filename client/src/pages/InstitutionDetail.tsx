@@ -24,6 +24,7 @@ import {
   GraduationCap,
   Mail,
   MapPin,
+  PenLine,
   Phone,
   Send,
   Share2,
@@ -169,20 +170,56 @@ export default function InstitutionDetail() {
   }
 
   if (!inst || isError) {
+    // Для редакторов и админов показываем кнопку «Заполнить карточку»
+    const isEditorOrAdmin = (user?.role === "editor" || user?.role === "admin");
+    const slugOrId = slugParam ?? (numericId ? String(numericId) : null);
+
     return (
       <PageLayout>
-        <div className="container py-20 text-center">
-          <Building2 className="w-14 h-14 mx-auto mb-4 text-muted-foreground/30" />
-          <h2 className="font-serif text-2xl font-semibold mb-2">Учреждение не найдено</h2>
-          <p className="text-sm text-muted-foreground mb-4">
-            Возможно, страница ещё не опубликована или адрес указан неверно.
-          </p>
-          <Link href="/catalog">
-            <Button variant="outline">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Вернуться в каталог
-            </Button>
-          </Link>
+        <div className="container py-24 text-center max-w-lg mx-auto">
+          <div className={`w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 ${
+            isEditorOrAdmin ? "bg-[var(--color-brand-navy)]/8" : "bg-muted"
+          }`}>
+            <Building2 className={`w-10 h-10 ${
+              isEditorOrAdmin ? "text-[var(--color-brand-navy)]" : "text-muted-foreground/40"
+            }`} />
+          </div>
+
+          {isEditorOrAdmin ? (
+            <>
+              <h2 className="font-serif text-2xl font-semibold mb-2">Карточка не заполнена</h2>
+              <p className="text-muted-foreground text-sm mb-6 leading-relaxed">
+                Учреждение создано, но информация ещё не добавлена. Перейдите в панель редактора чтобы заполнить карточку.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <Link href="/editor/institutions">
+                  <Button className="bg-[var(--color-brand-navy)] text-white px-6">
+                    <PenLine className="w-4 h-4 mr-2" />
+                    Заполнить карточку
+                  </Button>
+                </Link>
+                <Link href="/catalog">
+                  <Button variant="outline">
+                    <ArrowLeft className="w-4 h-4 mr-2" />
+                    В каталог
+                  </Button>
+                </Link>
+              </div>
+            </>
+          ) : (
+            <>
+              <h2 className="font-serif text-2xl font-semibold mb-2">Информация не заполнена</h2>
+              <p className="text-muted-foreground text-sm mb-6 leading-relaxed">
+                Страница этого учреждения ещё не опубликована или находится на модерации. Попробуйте зайти позже.
+              </p>
+              <Link href="/catalog">
+                <Button variant="outline">
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  Вернуться в каталог
+                </Button>
+              </Link>
+            </>
+          )}
         </div>
       </PageLayout>
     );
@@ -201,8 +238,28 @@ export default function InstitutionDetail() {
   const isRepresentative = user?.role === "representative" && inst.representativeId === user.id;
   const isEditorOrAdmin = user?.role === "editor" || user?.role === "admin";
 
+  // Карточка пустая — нет описания и фото
+  const isEmpty = !inst.shortDescription && !inst.description && (!inst.photos || inst.photos.length === 0);
+
   return (
     <PageLayout>
+      {/* Баннер «Заполнить карточку» для редакторов когда карточка пустая */}
+      {(isEditorOrAdmin || isRepresentative) && isEmpty && (
+        <div className="bg-[var(--color-brand-navy)] text-white">
+          <div className="container py-3 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2.5 text-sm">
+              <PenLine className="w-4 h-4 text-[var(--color-brand-gold)] shrink-0" />
+              <span>Карточка пустая — добавьте описание, контакты и фотографии</span>
+            </div>
+            <Link href="/editor/institutions">
+              <Button size="sm" className="bg-[var(--color-brand-gold)] hover:bg-[var(--color-brand-gold)]/90 text-[var(--color-brand-navy)] font-semibold shrink-0">
+                Заполнить карточку
+              </Button>
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* Статус-баннер для редакторов/админов */}
       {isEditorOrAdmin && inst.status !== "published" && (
         <div className={`border-b py-2.5 ${
