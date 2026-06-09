@@ -46,7 +46,7 @@ function InstitutionEditModal({
   onClose: () => void;
 }) {
   const utils = trpc.useUtils();
-  const { data: inst, isLoading } = trpc.institutions.getById.useQuery({ id: instId });
+  const { data: inst, isLoading } = trpc.institutions.getByIdEditor.useQuery({ id: instId });
 
   const [tab, setTab] = useState<"main" | "contacts" | "photos" | "specializations">("main");
   const [form, setForm] = useState(EMPTY_FORM);
@@ -89,23 +89,32 @@ function InstitutionEditModal({
     onSuccess: () => {
       setSaved(true);
       utils.institutions.list.invalidate();
-      utils.institutions.getById.invalidate({ id: instId });
+      utils.institutions.getByIdEditor.invalidate({ id: instId });
       toast.success("Карточка сохранена");
       setTimeout(() => setSaved(false), 2500);
     },
     onError: (e) => toast.error(e.message),
   });
 
+  const fixSlug = trpc.institutions.fixSlug.useMutation({
+    onSuccess: (data) => {
+      utils.institutions.getByIdEditor.invalidate({ id: instId });
+      toast.success(`Slug исправлен: ${data.slug}`);
+      setForm((f) => ({ ...f, slug: data.slug }));
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
   const updateSpecs = trpc.institutions.updateSpecializations.useMutation({
     onSuccess: () => {
-      utils.institutions.getById.invalidate({ id: instId });
+      utils.institutions.getByIdEditor.invalidate({ id: instId });
       toast.success("Специальности сохранены");
     },
     onError: (e) => toast.error(e.message),
   });
 
   const deletePhoto = trpc.institutions.deletePhoto.useMutation({
-    onSuccess: () => utils.institutions.getById.invalidate({ id: instId }),
+    onSuccess: () => utils.institutions.getByIdEditor.invalidate({ id: instId }),
   });
 
   const submitForReview = trpc.institutions.submitForReview.useMutation({
@@ -318,7 +327,39 @@ function InstitutionEditModal({
                     </div>
                     <div className="col-span-2">
                       <Label className="text-xs uppercase tracking-wide text-muted-foreground mb-1.5 block">URL-slug</Label>
-                      <Input value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} placeholder="rostov-university" />
+                      {/* Предупреждение если slug выглядит некорректно */}
+                      {form.slug && /^-+$/.test(form.slug.replace(/[a-z0-9]/g, "").replace(/-\d+$/, "")) && (
+                        <div className="mb-2 p-2.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+                          ⚠️ Slug «{form.slug}» некорректный — карточка не откроется. Введите новый и нажмите «Исправить slug».
+                        </div>
+                      )}
+                      <div className="flex gap-2">
+                        <Input
+                          value={form.slug}
+                          onChange={(e) => setForm({ ...form, slug: e.target.value })}
+                          placeholder="shahty-college-shptk"
+                          className="font-mono text-sm"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="shrink-0 text-xs"
+                          disabled={fixSlug.isPending || !form.slug.trim()}
+                          onClick={() => fixSlug.mutate({ id: instId, slug: form.slug })}
+                        >
+                          {fixSlug.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Исправить slug"}
+                        </Button>
+                      </div>
+                      {inst?.slug && (
+                        <p className="text-xs text-muted-foreground mt-1.5">
+                          Текущий slug в базе: <code className="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">{inst.slug}</code>
+                          {" · "}
+                          <a href={`/institution/${inst.slug}`} target="_blank" rel="noopener noreferrer" className="text-[var(--color-brand-navy)] hover:underline">
+                            Открыть страницу ↗
+                          </a>
+                        </p>
+                      )}
                     </div>
                   </div>
                   <Button
@@ -411,7 +452,7 @@ function InstitutionEditModal({
                   )}
 
                   {/* Добавить фото по URL */}
-                  <AddPhotoByUrl institutionId={instId} onAdded={() => utils.institutions.getById.invalidate({ id: instId })} />
+                  <AddPhotoByUrl institutionId={instId} onAdded={() => utils.institutions.getByIdEditor.invalidate({ id: instId })} />
 
                   {/* Обложка */}
                   <div className="border-t pt-4">

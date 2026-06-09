@@ -268,6 +268,7 @@ const institutionsRouter = router({
         name: z.string().optional(),
         city: z.string().optional(),
         type: z.enum(["university", "college", "institute", "academy", "school", "other"]).optional(),
+        slug: z.string().optional(),
         shortDescription: z.string().optional(),
         description: z.string().optional(),
         address: z.string().optional(),
@@ -296,6 +297,26 @@ const institutionsRouter = router({
       const { id, ...data } = input;
       await updateInstitution(id, data as any);
       return { success: true };
+    }),
+
+  fixSlug: editorProcedure
+    .input(z.object({ id: z.number(), slug: z.string().min(2) }))
+    .mutation(async ({ input, ctx }) => {
+      const inst = await getInstitutionById(input.id);
+      if (!inst) throw new TRPCError({ code: "NOT_FOUND" });
+      if (ctx.user.role === "representative" && inst.representativeId !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+      // Slug должен содержать только латиницу, цифры и дефис
+      const cleanSlug = input.slug.toLowerCase()
+        .replace(/\s+/g, "-")
+        .replace(/[^a-z0-9-]/g, "")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "");
+      if (!cleanSlug) throw new TRPCError({ code: "BAD_REQUEST", message: "Некорректный slug" });
+      const finalSlug = `${cleanSlug}-${inst.id}`;
+      await updateInstitution(input.id, { slug: finalSlug });
+      return { slug: finalSlug };
     }),
 
   submitForReview: editorProcedure
